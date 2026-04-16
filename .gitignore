@@ -1,0 +1,41 @@
+# PHP
+*.log
+*.cache
+vendor/
+composer.phar
+composer.lock
+
+# Database
+*.sql
+*.sqlite
+*.db
+
+# IDE & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Uploaded Images (optional - uncomment if you don't want to commit images)
+# images/*
+# !images/.gitkeep
+
+# Config files with sensitive data
+config/database.local.php
+.env
+
+# OS Files
+Thumbs.db
+desktop.ini
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Temporary files
+tmp/
+temp/
+*.tmp

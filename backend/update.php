@@ -1,87 +1,146 @@
 <?php
-$connect = new PDO("mysql:host=localhost;dbname=test", "root", "");
 
-$id = $_GET['id'];
+/**
+ * Update Product Page
+ */
 
-$query = "SELECT * FROM  tbl_product WHERE id = $id";
-$statement = $connect->prepare($query);
-$statement->execute();
-$result = $statement->fetchAll();
+include_once '../config/database.php';
+include_once '../classes/Product.php';
+include_once '../helpers/FileUpload.php';
 
-if (isset($_POST['btn'])) {
+$error_message = '';
+$success_message = '';
 
-    $name = $_POST['name'];
-    $price = $_POST['price'];
-    $quantity = $_POST['quantity'];
+// Validate ID
+$product_id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+if (!$product_id) {
+    header("Location: ../index.php");
+    exit;
+}
 
-    $fileName = "";
+// Initialize
+$db_connection = get_database_connection();
+$product_manager = new Product($db_connection);
 
-    echo "<script>
-    alert('data berhasil ditambah');
-    document.location.href = '../index.php';
-    </script";
+// Get existing product
+$product = $product_manager->get_product_by_id($product_id);
+if (!$product) {
+    header("Location: ../index.php");
+    exit;
+}
 
-    if (isset($_FILES['image'])) {
-        $file = $_FILES['image'];
+// Handle form submit
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_update'])) {
 
-        $fileName = $file['name'];
-        $fileTmp = $file['tmp_name'];
-        $fileError = $file['error'];
+    $product_name = filter_input(INPUT_POST, 'name', FILTER_SANITIZE_STRING);
+    $product_price = filter_input(INPUT_POST, 'price', FILTER_VALIDATE_FLOAT);
+    $product_quantity = filter_input(INPUT_POST, 'quantity', FILTER_VALIDATE_INT);
 
-        $folder = "C:\\xampp\\htdocs\\test\\test\\images\\";
+    $current_image = $product['image'];
+    $new_image = $current_image;
 
-        if ($fileError === UPLOAD_ERR_OK) {
-            move_uploaded_file($fileTmp, $folder . $fileName);
+    // Validation
+    if (empty($product_name)) {
+        $error_message = "Nama produk harus diisi";
+    } elseif ($product_price === false || $product_price <= 0) {
+        $error_message = "Harga harus berupa angka positif";
+    } elseif ($product_quantity === false || $product_quantity < 0) {
+        $error_message = "Jumlah harus berupa angka non-negatif";
+    } else {
+
+        // Handle image upload (optional)
+        if (isset($_FILES['image']) && $_FILES['image']['error'] !== UPLOAD_ERR_NO_FILE) {
+            $file_uploader = new FileUpload();
+            $uploaded_filename = $file_uploader->upload($_FILES['image']);
+
+            if ($uploaded_filename) {
+                $new_image = $uploaded_filename;
+
+                // Delete old image
+                if (!empty($current_image)) {
+                    $file_uploader->delete_file($current_image);
+                }
+            } else {
+                $errors = $file_uploader->get_errors();
+                $error_message = "Upload gagal: " . implode(", ", $errors);
+            }
+        }
+
+        // If no upload error
+        if (empty($error_message)) {
+            if ($product_manager->update_product(
+                $product_id,
+                $product_name,
+                $product_price,
+                $new_image,
+                $product_quantity
+            )) {
+                header("Location: ../index.php?updated=1");
+                exit;
+            } else {
+                $error_message = "Gagal update produk";
+            }
         }
     }
-
-    $stmt = $connect->prepare("UPDATE tbl_product SET name = :name, quantity = :quantity, price = :price, image = :image WHERE id = :id");
-
-    $stmt->bindParam(':name', $name);
-    $stmt->bindParam(':price', $price);
-    $stmt->bindParam(':quantity', $quantity);
-    $stmt->bindParam(':image', $fileName);
-    $stmt->bindParam(':id', $id);
-    $stmt->execute();
 }
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="id">
 
 <head>
-    <title>Toko Sepatu</title>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.0/jquery.min.js"></script>
+    <meta charset="UTF-8">
+    <title>Update Produk</title>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" />
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
 </head>
 
 <body>
-    <form action="" method="post" enctype="multipart/form-data">
-        <div class="container">
-            <h1>Edit Stok Barang</h1>
-            <div class="row">
-                <div class="col-md-8">
-                    <div class="form-group">
-                        <label>Nama Barang</label>
-                        <input class="form-control" type="text" name="name" value="<?= $result[0]["name"]; ?>">
+    <div class="container">
+        <h2>Update Produk</h2>
 
-                        <label style="margin-top: 20px;">Gambar Sepatu</label>
-                        <input type="file" name="image">
-
-                        <label style="margin-top: 20px;">Jumlah</label>
-                        <input class="form-control" type="text" name="quantity" value="<?= $result[0]["quantity"]; ?>">
-
-                        <label style="margin-top: 20px;">Harga</label>
-                        <input class="form-control" type="text" name="price" value="<?= $result[0]["price"]; ?>">
-
-                        <button style="margin-top: 20px;" type="submit" name="btn">Ubah</button>
-                        <a href="../index.php">Kembali</a>
-                    </div>
-                </div>
+        <?php if ($error_message): ?>
+            <div class="alert alert-danger">
+                <?php echo htmlspecialchars($error_message); ?>
             </div>
-        </div>
-    </form>
+        <?php endif; ?>
+
+        <form method="post" enctype="multipart/form-data">
+            <div class="form-group">
+                <label>Nama Produk</label>
+                <input type="text" name="name" class="form-control"
+                    value="<?php echo htmlspecialchars($product['name']); ?>" required>
+            </div>
+
+            <div class="form-group">
+                <label>Harga</label>
+                <input type="number" name="price" step="0.01" class="form-control"
+                    value="<?php echo $product['price']; ?>" required>
+            </div>
+
+            <div class="form-group">
+                <label>Jumlah</label>
+                <input type="number" name="quantity" class="form-control"
+                    value="<?php echo $product['quantity']; ?>" required>
+            </div>
+
+            <div class="form-group">
+                <label>Gambar Saat Ini</label><br>
+                <img src="../images/<?php echo htmlspecialchars($product['image']); ?>"
+                    width="150">
+            </div>
+
+            <div class="form-group">
+                <label>Ganti Gambar (Opsional)</label>
+                <input type="file" name="image" accept="image/*">
+            </div>
+
+            <button type="submit" name="btn_update" class="btn btn-success">
+                Update
+            </button>
+
+            <a href="../index.php" class="btn btn-default">Kembali</a>
+        </form>
+    </div>
 </body>
 
 </html>
